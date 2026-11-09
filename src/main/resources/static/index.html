@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>University Management</title>
+  <style>
+    body { font-family: sans-serif; max-width: 700px; margin: 30px auto; padding: 0 15px; }
+    input, select, button { padding: 6px; margin: 3px; }
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 6px; text-align: left; }
+    #message { color: #b00020; margin: 10px 0; min-height: 20px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h2>University Management</h2>
+  <div id="message"></div>
+
+  <!-- 1. Login -->
+  <div id="loginBox">
+    <h3>Login</h3>
+    <input id="username" placeholder="username">
+    <input id="password" type="password" placeholder="password">
+    <button onclick="login()">Login</button>
+  </div>
+
+  <!-- 2. Main page (shown after login) -->
+  <div id="mainBox" class="hidden">
+    <button onclick="logout()">Logout</button>
+
+    <h3>Show</h3>
+    <select id="type" onchange="loadList()">
+      <option value="students">Students</option>
+      <option value="teachers">Teachers</option>
+      <option value="admins">Admins</option>
+    </select>
+
+    <table>
+      <thead><tr><th>ID</th><th>Name</th><th>Username</th><th>Actions</th></tr></thead>
+      <tbody id="list"></tbody>
+    </table>
+
+    <h3>Add new</h3>
+    <input id="newName" placeholder="name">
+    <input id="newUsername" placeholder="username">
+    <input id="newPassword" type="password" placeholder="password">
+    <button onclick="addUser()">Add</button>
+  </div>
+
+<script>
+  const message = document.getElementById("message");
+
+  function type() { return document.getElementById("type").value; }
+
+  // Show an error if the server says no (401 = not logged in, 403 = wrong role ...)
+  function check(response) {
+    if (response.status === 403) message.textContent = "403: your role is not allowed to do this";
+    else if (response.status === 401) message.textContent = "401: please login";
+    else if (response.status === 404) message.textContent = "404: not found";
+    else if (response.status === 409) message.textContent = "409: username already exists";
+    else { message.textContent = ""; return true; }
+    return false;
+  }
+
+  // ----- Login / Logout (uses Spring Security's /login and /logout) -----
+  async function login() {
+    const body = new URLSearchParams({
+      username: document.getElementById("username").value,
+      password: document.getElementById("password").value
+    });
+    const response = await fetch("/login", { method: "POST", body: body });
+    if (response.url.includes("error")) {
+      message.textContent = "Wrong username or password";
+      return;
+    }
+    message.textContent = "";
+    document.getElementById("loginBox").classList.add("hidden");
+    document.getElementById("mainBox").classList.remove("hidden");
+    loadList();
+  }
+
+  async function logout() {
+    await fetch("/logout", { method: "POST" });
+    document.getElementById("mainBox").classList.add("hidden");
+    document.getElementById("loginBox").classList.remove("hidden");
+    document.getElementById("list").innerHTML = "";
+    message.textContent = "";
+  }
+
+  // ----- READ: GET /api/{type} -----
+  async function loadList() {
+    const response = await fetch("/api/" + type());
+    const list = document.getElementById("list");
+    list.innerHTML = "";
+    if (!check(response)) return;
+    const users = await response.json();
+    for (const u of users) {
+      list.innerHTML += `<tr>
+        <td>${u.id}</td><td>${u.name}</td><td>${u.username}</td>
+        <td><button onclick="editUser(${u.id}, '${u.name}', '${u.username}')">Edit</button>
+            <button onclick="deleteUser(${u.id})">Delete</button></td>
+      </tr>`;
+    }
+  }
+
+  // ----- CREATE: POST /api/{type} -----
+  async function addUser() {
+    const response = await fetch("/api/" + type(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: document.getElementById("newName").value,
+        username: document.getElementById("newUsername").value,
+        password: document.getElementById("newPassword").value
+      })
+    });
+    if (check(response)) loadList();
+  }
+
+  // ----- UPDATE: PUT /api/{type}/{id} -----
+  async function editUser(id, oldName, oldUsername) {
+    const name = prompt("New name:", oldName);
+    if (name === null) return;
+    const response = await fetch("/api/" + type() + "/" + id, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name, username: oldUsername })
+    });
+    if (check(response)) loadList();
+  }
+
+  // ----- DELETE: DELETE /api/{type}/{id} -----
+  async function deleteUser(id) {
+    const response = await fetch("/api/" + type() + "/" + id, { method: "DELETE" });
+    if (check(response)) loadList();
+  }
+</script>
+</body>
+</html>
