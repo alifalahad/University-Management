@@ -8,6 +8,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
+import java.util.Map;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 // INTEGRATION TEST — starts the full application with H2 database
@@ -36,14 +38,17 @@ class UniversityApplicationTests {
         repo.save(admin);
 
         // 2. Create a student via the API (authenticated as admin)
-        User student = new User();
-        student.setName("Jane");
-        student.setUsername("jane123");
-        student.setPassword("pass123");
+        //    Use a Map instead of User, because User.password has @JsonProperty(WRITE_ONLY)
+        //    which prevents it from being serialized to JSON
+        Map<String, String> studentData = Map.of(
+                "name", "Jane",
+                "username", "jane123",
+                "password", "pass123"
+        );
 
         ResponseEntity<User> createResponse = restTemplate
                 .withBasicAuth("testadmin", "admin123")
-                .postForEntity("/api/students", student, User.class);
+                .postForEntity("/api/students", studentData, User.class);
 
         assertThat(createResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(createResponse.getBody().getName()).isEqualTo("Jane");
